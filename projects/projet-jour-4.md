@@ -1,237 +1,255 @@
 # Projet - Pipeline data de bout en bout avec Spark
 
-Jour 4 de la formation Apache Spark. Cette journée est consacrée à un projet pratique : concevoir
-et réaliser un pipeline complet, de l'ingestion des données brutes jusqu'à l'analyse, en mobilisant
-tout ce qui a été vu pendant les trois premiers jours.
+Jour 4 de la formation Apache Spark. Une journée, un projet : un pipeline complet, de l'ingestion
+des données brutes jusqu'à l'analyse, plus une exploration qui pousse au-delà du cours. Le tout
+consigné dans un rapport écrit.
 
-Le projet se fait en binôme ou trinôme. Le code est en PySpark, exécuté en mode local sur vos
-machines. L'objectif n'est pas de produire le pipeline le plus complexe, mais un pipeline propre,
-qui tourne, qui répond à de vraies questions, et dont vous savez expliquer le comportement.
+En binôme ou trinôme. Code en PySpark, mode local. Le livrable noté est un **rapport écrit**, pas
+une présentation orale. L'objectif n'est pas le pipeline le plus complexe : un pipeline propre, qui
+tourne, qui répond à de vraies questions, et un rapport qui l'explique.
 
 ---
 
-## 1. Objectif et socle minimal attendu
+## 1. Socle attendu
 
-Vous construisez un pipeline ETL (Extract, Transform, Load) suivi d'une phase d'analyse. La
-démarche est plus importante que le nombre de lignes de code : on attend un pipeline lisible,
-reproductible, et dont chaque étape est justifiée.
+Un pipeline ETL (Extract, Transform, Load), puis une phase d'analyse, puis une exploration, le tout
+décrit dans un rapport. Six éléments, attendus de toutes les équipes :
 
-Le socle minimal, attendu de toutes les équipes, comporte cinq éléments :
+1. **Ingestion propre** : lire le brut (Parquet ou CSV), schéma explicite pour le CSV, typage,
+   nettoyage (valeurs manquantes, doublons, valeurs aberrantes), écriture d'une couche
+   intermédiaire en Parquet. Si l'ingestion est sale, toute l'analyse est faussée.
+2. **Trois analyses** distinctes qui répondent à des questions métier : au moins une agrégation
+   (`groupBy` + `agg`), une jointure, une window function. Chaque analyse porte une lecture métier
+   écrite : ce que dit le résultat.
+3. **Une optimisation mesurée** : broadcast join, cache d'un DataFrame réutilisé, ou
+   repartitionnement. Temps avant/après chiffré, ou lecture de plan à l'appui.
+4. **Une lecture de la Spark UI** : port 4040, un job avec shuffle, le DAG, les stages et les
+   tasks. Capture(s) dans le rapport.
+5. **Une exploration au-delà du cours** : choisir une piste du menu (section 6), aller plus loin
+   que les TP, mesurer, et écrire ce qu'on en retient. C'est ce qui distingue un projet d'un TP.
+6. **Un rapport écrit** : le document qui présente le jeu de données, le pipeline, les analyses et
+   leur lecture, l'optimisation, la Spark UI et l'exploration. Gabarit fourni :
+   `projects/rapport-modele.md`.
 
-1. **Une ingestion propre** : lire les données brutes (Parquet ou CSV), poser un schéma (explicite
-   pour le CSV), typer correctement les colonnes, nettoyer (valeurs manquantes, doublons, valeurs
-   aberrantes), puis écrire une couche intermédiaire en Parquet. C'est la base : si l'ingestion est
-   sale, toute l'analyse est faussée.
-2. **Au moins trois analyses** distinctes qui répondent à des questions métier. Au moins une doit
-   utiliser une agrégation (`groupBy` + `agg`), au moins une doit utiliser une jointure, et au moins
-   une doit utiliser une window function (classement, cumul ou moyenne glissante).
-3. **Une optimisation justifiée** : un broadcast join, une mise en cache d'un DataFrame réutilisé,
-   ou un repartitionnement réfléchi. Vous devez pouvoir dire pourquoi vous l'avez fait et ce que ça
-   a changé (mesure de temps avant et après, ou lecture du plan).
-4. **Une lecture de la Spark UI** : ouvrir l'interface (port 4040), repérer un job avec shuffle,
-   lire le DAG, et savoir commenter ce que vous voyez (stages, tasks, échange de données).
-5. **Une courte restitution** : présenter en 10 minutes votre jeu de données, vos choix, vos
-   résultats et ce que vous avez appris.
-
-> Tout ce qui dépasse ce socle (streaming, MLlib, multi-mois, partitionnement fin, Delta) est un
-> bonus valorisé mais facultatif. Mieux vaut un socle solide qu'un bonus bancal posé sur un socle
-> fragile.
+> Tout ce qui dépasse ce socle (deuxième exploration, streaming, MLlib, Delta, multi-mois) est un
+> bonus. Mieux vaut un socle solide qu'un bonus bancal posé sur un socle fragile.
 
 ---
 
 ## 2. Choisir son jeu de données
 
-Quatre options, toutes décrites dans `data/sources-open-data.md` (URLs vérifiées). Le script
-`data/download.sh` récupère directement le taxi, les zones, un département DVF et MovieLens ; pour
-les accidents ONISR, suivez le lien donné dans `data/sources-open-data.md`. Choisissez l'option qui
-vous parle : un projet sur des données
-qui vous intéressent se mène mieux.
+Quatre options, décrites dans `data/sources-open-data.md` (URLs vérifiées). Le script
+`data/download.sh` récupère le taxi, les zones, plusieurs départements DVF et MovieLens. Choisissez
+un jeu qui vous parle : un projet sur des données qui vous intéressent se mène mieux.
 
 ### Option A : NYC Yellow Taxi multi-mois (recommandé)
 
-Le fil rouge du cours, en plus gros. Au lieu d'un seul mois, vous travaillez sur 3 mois ou plus
-(`yellow_tripdata_2024-01.parquet`, `2024-02`, `2024-03`), plus la table des zones
-(`taxi_zone_lookup.csv`).
+Le fil rouge du cours, en plus gros : 3 mois ou plus (`yellow_tripdata_2024-01..03.parquet`) plus la
+table des zones (`taxi_zone_lookup.csv`).
 
-- Source : section 1 de `data/sources-open-data.md`.
-- Format : Parquet natif (idéal pour parler de colonnaire, predicate pushdown, partition pruning).
-- Volume : environ 3 millions de courses par mois, donc ~9 millions sur 3 mois. De quoi sentir le
-  parallélisme et le shuffle.
-- Idées d'analyses : revenu par heure de la journée et par jour de semaine ; top 10 des trajets
-  zone à zone (jointure double sur `PULocationID` et `DOLocationID`) ; classement des zones par
-  pourboire moyen (window) ; évolution mois après mois ; détection d'anomalies de tarif.
-- Optimisation évidente : broadcast de la table des zones (265 lignes) dans la jointure.
+- Format : Parquet natif (colonnaire, predicate pushdown, partition pruning).
+- Volume : ~3 millions de courses par mois, donc ~9 millions sur 3 mois. De quoi sentir le shuffle.
+- Analyses : revenu par heure et par jour de semaine ; top trajets zone à zone (jointure double) ;
+  classement des zones par pourboire (window) ; évolution mois après mois.
+- Optimisation évidente : broadcast de la table des zones (265 lignes).
 
-### Option B : DVF, demandes de valeurs foncières (immobilier France)
+### Option B : DVF, valeurs foncières (immobilier France)
 
 Toutes les transactions immobilières d'un département. Excellent pour un public francophone.
 
-- Source : section 2 de `data/sources-open-data.md`. Commencer par un seul département
-  (`dvf_75_2023.csv.gz` ou un autre département, beaucoup plus léger que la France entière).
-- Format : CSV compressé gzip. Bon cas pour un schéma explicite et un nettoyage sérieux.
-- Colonnes clés : `date_mutation`, `valeur_fonciere`, `code_postal`, `nom_commune`,
-  `code_departement`, `type_local`, `surface_reelle_bati`, `nombre_pieces_principales`.
-- Idées d'analyses : prix au m2 par commune (calcul `valeur_fonciere / surface_reelle_bati`,
-  attention à la division par zéro) ; classement des communes les plus chères (window) ; évolution
-  mensuelle des prix ; répartition par `type_local` (maison, appartement) ; filtrage des valeurs
-  aberrantes (transactions à 1 euro, surfaces nulles).
+- Format : CSV compressé gzip. Bon cas de schéma explicite et de nettoyage sérieux.
+- Commencer par un département (`dvf_75_2023.csv.gz`). La couche Parquet petite couronne
+  partitionnée par département produite au TP05b est réutilisable comme point de départ.
+- Analyses : prix au m2 par commune (protéger la division) ; communes les plus chères (window) ;
+  évolution mensuelle ; répartition par `type_local` ; filtrage des transactions à 1 euro.
 - Optimisation évidente : cache du DataFrame nettoyé, réutilisé par plusieurs analyses.
 
 ### Option C : Accidents corporels ONISR (sécurité routière France)
 
-Tous les accidents corporels déclarés en France pour une année, répartis en quatre fichiers
-relationnels. Le meilleur choix pour s'exercer aux jointures multi-tables.
+Tous les accidents corporels d'une année, en quatre fichiers relationnels. Le meilleur choix pour
+les jointures multi-tables.
 
-- Source : section 3 de `data/sources-open-data.md`. Quatre CSV par année : `caracteristiques`,
-  `lieux`, `vehicules`, `usagers`.
-- Format : CSV, séparateur point-virgule, encodage à vérifier (souvent latin1). Schéma explicite
-  fortement conseillé.
-- Clé de jointure : `Num_Acc` relie les quatre tables.
-- Idées d'analyses : gravité des accidents par condition météo ; accidents par heure et jour de la
-  semaine ; classement des départements (window) ; profils d'usagers (âge, catégorie) ; jointure
-  des quatre tables pour un tableau croisé complet.
-- Optimisation évidente : broadcast de la plus petite table dans une jointure, ou cache de la table
-  jointe réutilisée.
+- Format : CSV, séparateur point-virgule, encodage à vérifier (souvent latin1). Schéma explicite.
+- Clé de jointure : `Num_Acc` relie les quatre tables (`caracteristiques`, `lieux`, `vehicules`,
+  `usagers`).
+- Analyses : gravité par météo ; accidents par heure et jour ; classement des départements
+  (window) ; profils d'usagers ; tableau croisé des quatre tables.
+- Optimisation évidente : broadcast de la plus petite table, ou cache de la table jointe.
 
 ### Option D : MovieLens (notes de films)
 
-Le classique des jointures, agrégations et recommandation. Utile si vous voulez tenter le bonus
-MLlib.
+Le classique des jointures et agrégations. Utile si vous visez le bonus MLlib.
 
-- Source : section 5 de `data/sources-open-data.md`. Commencer par `ml-latest-small`
-  (`ratings.csv`, `movies.csv`), passer à `ml-25m` si la machine suit.
-- Format : CSV. Jointure `ratings` + `movies` sur `movieId`.
-- Idées d'analyses : films les mieux notés (avec un seuil minimal de votes pour éviter les biais) ;
-  popularité par genre ; nombre de notes par utilisateur ; note moyenne dans le temps ; classement
-  des films par genre (window).
+- Format : CSV. Jointure `ratings` + `movies` sur `movieId`. Commencer par `ml-latest-small`.
+- Analyses : films les mieux notés (avec un seuil de votes) ; popularité par genre ; notes par
+  utilisateur ; classement par genre (window).
 - Optimisation évidente : broadcast de `movies` (petit) dans la jointure avec `ratings` (gros).
 - Bonus naturel : recommandation par ALS (MLlib).
 
 ---
 
-## 3. Étapes attendues
+## 3. Étapes de la journée
 
-Le pipeline suit l'architecture vue en cours : couche brute (bronze), couche nettoyée (silver),
-couche agrégée (gold). Vous n'êtes pas obligés d'écrire physiquement les trois couches, mais la
-logique doit être présente.
+Architecture vue en cours : couche brute (bronze), nettoyée (silver), agrégée (gold). Pas obligé
+d'écrire physiquement les trois couches, mais la logique doit être présente.
 
-### Étape 1 : ingestion et nettoyage (couche bronze vers silver)
+```
+brut (bronze)  ->  nettoyé (silver, Parquet)  ->  agrégé (gold, résultats)
+                                                ->  exploration (mesures)  ->  rapport
+```
 
-- Lire les données brutes. Pour du CSV, définir un schéma explicite (`StructType`) plutôt que de
-  laisser Spark inférer : c'est plus sûr et plus rapide.
+### Étape 1 : ingestion et nettoyage (bronze -> silver)
+
+- Lire le brut. Pour du CSV, définir un schéma explicite (`StructType`), pas `inferSchema`.
 - Inspecter : `printSchema()`, `show(5)`, `count()`, `describe()` sur les colonnes numériques.
-- Typer correctement (dates, nombres). Convertir les colonnes texte qui devraient être numériques.
-- Nettoyer : retirer les doublons (`dropDuplicates`), gérer les valeurs manquantes
-  (`na.drop` / `na.fill`), filtrer les valeurs aberrantes (montants négatifs, distances nulles,
-  surfaces à zéro, dates incohérentes).
-- Ecrire la couche nettoyée en Parquet (`write.mode("overwrite").parquet(...)`), éventuellement
-  partitionnée par une colonne pertinente (mois, département, année).
+- Typer (dates, nombres), dériver les colonnes utiles (`withColumn`).
+- Nettoyer : doublons (`dropDuplicates`), manquants (`na.drop`/`na.fill`), aberrants (montants
+  négatifs, distances ou surfaces nulles, dates incohérentes).
+- Écrire la couche silver en Parquet, partitionnée par une colonne à faible cardinalité (mois,
+  département, année).
 
-### Étape 2 : transformation et analyse (couche silver vers gold)
+### Étape 2 : transformation et analyses (silver -> gold)
 
-- Relire la couche Parquet nettoyée (pas les données brutes : on travaille sur du propre).
-- Construire vos colonnes dérivées (`withColumn`) : durée, prix au km, prix au m2, heure de la
-  journée, jour de semaine, catégorie.
-- Réaliser vos trois analyses : une agrégation, une jointure, une window function.
-- Introduire votre optimisation : broadcast join, cache, ou repartition, en mesurant l'effet.
+- Relire la couche Parquet propre (pas le brut).
+- Vos trois analyses : une agrégation, une jointure, une window function.
+- Votre optimisation : broadcast, cache, ou repartition, en mesurant l'effet.
+- Écrire les résultats de synthèse (petits fichiers).
 
-### Étape 3 : finalisation
+### Étape 3 : exploration au-delà du cours
 
-- Ecrire les résultats des analyses (Parquet ou CSV de synthèse, petits fichiers).
-- Ouvrir la Spark UI (port 4040) pendant qu'un job tourne, repérer un stage avec shuffle, lire le
-  DAG, noter ce que vous observez.
-- Nettoyer le code, ajouter des commentaires, préparer la restitution.
+- Choisir une piste du menu (section 6).
+- Isoler une expérience reproductible : un seul réglage qui varie, le reste fixe.
+- Mesurer avant/après (temps, octets lus, durée des tasks, ou lecture de plan).
+- Noter le résultat, même contre-intuitif ou négatif.
+
+### Étape 4 : rapport
+
+- Remplir le gabarit `projects/rapport-modele.md`.
+- Insérer les captures de la Spark UI et les extraits de résultats relevés en cours de route.
+- Relire : démarche claire, chiffres présents, limites assumées.
 
 ---
 
-## 4. Jalons horaires de la journée
+## 4. Jalons horaires
 
-Les horaires sont indicatifs, l'important est
-de respecter l'ordre et de ne pas sauter le cadrage.
+Indicatifs. L'important est l'ordre et de ne pas sauter le cadrage ni la rédaction.
 
 | Horaire | Bloc | Ce que vous faites |
 |---------|------|--------------------|
-| 9h30    | Cadrage (30 min) | Rappel du socle, choix du jeu de données, constitution des équipes |
-| 10h00   | Conception (45 min) | Schéma cible, étapes du pipeline, liste des questions métier à traiter |
-| 10h45   | Réalisation étape 1 (jusqu'à 13h00) | Ingestion, typage, nettoyage, écriture de la couche intermédiaire |
-| 13h00   | Pause déjeuner | - |
-| 14h00   | Réalisation étape 2 (90 min) | Agrégations, jointures, window functions, optimisation |
-| 15h30   | Réalisation étape 3 (60 min) | Sorties finales, lecture de la Spark UI, préparation de la restitution |
-| 16h30   | Restitutions (45 min) | 10 min par équipe, retour sur les choix, bilan des 4 jours |
+| 9h30  | Cadrage (30 min)        | Socle, choix du jeu de données, constitution des équipes |
+| 10h00 | Conception (45 min)     | Schéma cible, étapes du pipeline, questions métier, piste d'exploration visée |
+| 10h45 | Étape 1 (jusqu'à 13h00) | Ingestion, typage, nettoyage, écriture de la couche silver |
+| 13h00 | Pause déjeuner          | - |
+| 14h00 | Étape 2 (90 min)        | Agrégations, jointures, window functions, optimisation, lecture de la Spark UI |
+| 15h30 | Étape 3 (60 min)        | Exploration au-delà du cours, mesures |
+| 16h30 | Étape 4 (60 min)        | Rédaction et relecture du rapport |
+| 17h30 | Remise                  | Dépôt du rapport et du code |
 
-> Visez une couche intermédiaire écrite et relue avant la pause déjeuner : vous attaquerez
-> l'analyse de l'après-midi l'esprit tranquille.
-
----
-
-## 5. Livrables
-
-A rendre en fin de journée (un dépôt ou un dossier partagé par équipe) :
-
-- **Les scripts PySpark** du pipeline, organisés et commentés. Au minimum un script d'ingestion et
-  un script d'analyse, ou un pipeline unique découpé en sections claires. Vous pouvez partir du
-  squelette fourni dans `starter-code/pipeline.py`.
-- **Les sorties** : la couche Parquet nettoyée et les fichiers de résultats des analyses (les
-  petits fichiers de synthèse, pas les données brutes).
-- **Une courte présentation** (quelques slides ou un README) : le jeu de données choisi, le schéma
-  cible, les trois analyses et leurs résultats, l'optimisation et son effet, une capture ou une
-  description de ce que vous avez lu dans la Spark UI.
+> Visez une couche silver écrite et relue avant le déjeuner : c'est le point de bascule de la
+> journée. Arrêtez le code vers 16h30 pour garder une heure pleine de rédaction. Le bloc d'ingestion
+> (2h15) suppose un CSV à typer et nettoyer ; sur le taxi (Parquet déjà typé) il est plus court,
+> alors profitez de l'avance pour une quatrième analyse, un mois de plus, ou un début d'exploration.
 
 ---
 
-## 6. Grille d'évaluation
+## 5. Le rapport écrit (livrable principal)
 
-Notée sur 20 points. La grille récompense un socle complet et bien expliqué avant la complexité.
+C'est le livrable noté. Pas de présentation orale. Remplir `projects/rapport-modele.md` (ou un
+document équivalent). Il contient, dans cet ordre :
 
-| Critere | Points | Attendu |
+- Le jeu de données et le schéma cible.
+- Le pipeline : bronze/silver/gold, choix de partitionnement, ce qui a été nettoyé et combien de
+  lignes écartées.
+- Les trois analyses : pour chacune, la question, le code clé, un extrait de résultat, la lecture
+  métier.
+- L'optimisation : pourquoi, mesure avant/après ou extrait de plan, ce que ça change.
+- La lecture de la Spark UI : où se produit le shuffle, capture(s), commentaire.
+- L'exploration au-delà du cours : la piste choisie, le protocole, les mesures, la conclusion.
+- Ce qu'on a appris et les limites.
+
+> Le rapport se nourrit du travail au fil de l'eau : capturez la Spark UI et notez les temps pendant
+> que ça tourne, pas à 17h. Un chiffre relevé après coup n'est pas reproductible. Visez un document
+> dense et lisible : extraits de code, extraits de résultats, captures, phrases courtes.
+
+---
+
+## 6. Menu d'exploration (au-delà du cours)
+
+Choisir au moins une piste. Chacune va plus loin que les TP : à vous de trouver l'API et la méthode.
+Le but est un résultat chiffré et une conclusion, pas une démo qui tourne.
+
+- **AQE et nombre de partitions.** Mesurer l'effet de l'Adaptive Query Execution et du nombre de
+  partitions de shuffle sur une de vos agrégations. Quel réglage pour votre volume, et que montre le
+  plan ?
+- **Données mal réparties (skew).** Certaines clés concentrent les lignes (sur le taxi, les zones
+  aéroport). Mesurer le déséquilibre des tasks d'un même stage, le corriger, puis remesurer.
+- **UDF, pandas_udf et fonction native.** Écrire la même transformation de trois façons et comparer
+  les temps. Quand une UDF se justifie-t-elle, et que coûte-t-elle ?
+- **Table gérée et upsert.** Remplacer la réécriture complète de la silver par une mise à jour
+  incrémentale (catalogue, ou un format transactionnel). Montrer la différence.
+- **Déploiement par spark-submit.** Lancer le pipeline en soumission au lieu d'une session
+  interactive. Point de départ : `demos/08-deploiement/cluster-standalone.sh`. Qu'est-ce que change
+  le passage de `local[*]` à une soumission ?
+- **Pushdown mesuré.** Sur une couche Parquet partitionnée, prouver le partition pruning et le
+  predicate pushdown, et chiffrer les octets lus avec et sans filtre.
+- **Benchmark de formats.** Comparer plusieurs formats et compressions : taille sur disque et temps
+  de relecture d'une agrégation. Point de départ : `demos/03-ingestion/formats_benchmark.py`, à
+  pousser au-delà (codecs de compression, temps d'une agrégation).
+- **(Plus lourd, bonus) Streaming ou MLlib.** Un agrégat continu sur un flux simulé, ou un
+  mini-modèle. Bases : `demos/05-streaming`, `demos/06-mllib`, `exercises/09-streaming-mllib.md`.
+
+> Une exploration réussie tient en trois phrases : ce que vous avez testé, ce que vous avez mesuré,
+> ce que vous en concluez. Un résultat négatif clairement expliqué vaut un résultat positif.
+
+---
+
+## 7. Livrables
+
+À déposer en fin de journée (un dépôt ou un dossier partagé par équipe) :
+
+- **Le code PySpark** du pipeline, découpé en étapes claires. Partir de `starter-code/pipeline.py`.
+- **Les sorties** : la couche silver en Parquet et les fichiers de synthèse des analyses (petits
+  fichiers, pas le brut).
+- **Le rapport écrit** : `rapport-modele.md` rempli (ou équivalent), captures de la Spark UI
+  incluses.
+
+---
+
+## 8. Grille d'évaluation
+
+Notée sur 20 points. Récompense un socle complet et bien expliqué avant la complexité.
+
+| Critère | Points | Attendu |
 |---------|--------|---------|
-| Ingestion et nettoyage | 4 | Schéma correct (explicite pour le CSV), typage juste, doublons et valeurs aberrantes traités, couche intermédiaire écrite en Parquet. |
-| Analyses (3 minimum) | 5 | Au moins une agrégation, une jointure et une window function. Résultats cohérents et qui ont du sens métier. |
-| Optimisation justifiée | 4 | Une optimisation réelle (broadcast, cache, repartition) avec une explication du pourquoi et une mesure ou une lecture de plan à l'appui. |
-| Lecture de la Spark UI | 3 | Capacité à ouvrir la Spark UI, repérer un shuffle, lire le DAG et commenter stages et tasks. |
-| Qualité du code | 2 | Code lisible, découpé en étapes, commenté, reproductible. Pas de `collect()` inutile sur de gros volumes. |
-| Restitution | 2 | Présentation claire en 10 min : démarche, choix, résultats, ce qui a été appris. |
+| Ingestion et nettoyage | 4 | Schéma correct (explicite pour le CSV), typage juste, doublons et aberrants traités, couche silver écrite en Parquet. |
+| Analyses (3 minimum) | 4 | Une agrégation, une jointure, une window function. Résultats cohérents et lecture métier présente. |
+| Optimisation mesurée | 3 | Une optimisation réelle (broadcast, cache, repartition) avec mesure avant/après ou lecture de plan. |
+| Lecture de la Spark UI | 2 | Repérer un shuffle, lire le DAG, commenter stages et tasks. |
+| Exploration au-delà du cours | 3 | Une piste du menu menée au-delà des TP : protocole, mesure, conclusion chiffrée. |
+| Rapport écrit | 3 | Document clair et structuré : démarche, choix, résultats, lectures métier, limites. |
+| Qualité du code | 1 | Lisible, découpé, reproductible. Pas de `collect()` inutile sur gros volume. |
 | **Total** | **20** | |
 
-> Bonus possible : jusqu'à 2 points supplémentaires (plafonnés à 20/20) pour une piste avancée
+> Bonus jusqu'à +2 points (plafonné à 20/20) pour une seconde exploration ou une piste avancée
 > réussie et bien expliquée.
 
 ---
 
-## 7. Pistes bonus
+## 9. Conseils et pièges à éviter
 
-A tenter seulement si le socle est solide et qu'il vous reste du temps :
-
-- **Structured Streaming** : simuler un flux en déposant des fichiers dans un dossier surveillé par
-  `readStream`, puis écrire un agrégat continu. Sur le taxi, on peut découper un mois en plusieurs
-  fichiers et les laisser arriver un par un.
-- **MLlib** : un mini pipeline de machine learning. Sur le taxi, prédire le pourboire à partir de la
-  distance et du montant (régression). Sur MovieLens, une recommandation par ALS.
-- **Partitionnement fin** : écrire la couche nettoyée partitionnée (`partitionBy`) par mois ou par
-  département, puis montrer le partition pruning à la relecture (lire le plan, comparer les temps).
-- **Delta Lake** : utiliser le format Delta à la place du Parquet pour la couche intermédiaire, et
-  montrer une mise à jour transactionnelle (`MERGE` ou `update`) plutôt qu'une réécriture complète.
-
----
-
-## 8. Conseils et pièges à éviter
-
-- **Commencez petit.** Un département DVF, un mois de taxi, MovieLens small. Faites tourner le
-  pipeline de bout en bout sur un petit volume avant d'ajouter des mois ou des années. Un pipeline
-  qui marche sur 100 000 lignes marchera sur 10 millions.
+- **Commencez petit.** Un département, un mois, MovieLens small. Le pipeline de bout en bout sur un
+  petit volume avant d'ajouter des mois. Ce qui marche sur 100 000 lignes marchera sur 10 millions.
 - **Validez le schéma tôt.** Un `printSchema()` dès le début évite de découvrir en fin de journée
   qu'une colonne numérique a été lue comme du texte (fréquent en CSV).
 - **Ne collectez pas tout.** `collect()` ou `toPandas()` ramène toutes les données sur le driver et
-  peut le faire planter. Utilisez `show()`, `take(n)`, ou écrivez sur disque. On ne collecte que de
-  petits résultats agrégés.
-- **Méfiez-vous de la division par zéro.** En Spark, `x / 0` ne plante pas : il renvoie `Infinity`
-  ou `NaN`, qui pollue toutes les moyennes ensuite. Protégez le dénominateur avec un
-  `F.when(col > 0, ...).otherwise(None)`.
+  peut le faire planter. Utilisez `show()`, `take(n)`, ou écrivez sur disque.
+- **Méfiez-vous de la division par zéro.** En Spark, `x / 0` renvoie `Infinity` ou `NaN`, qui
+  pollue toutes les moyennes ensuite. Protégez le dénominateur : `F.when(col > 0, ...).otherwise(None)`.
 - **Utilisez `&`, `|`, `~`, pas `and`, `or`, `not`** dans les filtres, et parenthésez chaque
-  condition. `and` sur des colonnes lève `Cannot convert column into bool`.
-- **Lisez la Spark UI au fil de l'eau**, pas à la fin. C'est en regardant un job tourner que vous
-  comprenez où est le temps. Repérez les Exchange (shuffle) dans le DAG.
-- **Justifiez chaque optimisation.** Une optimisation ajoutée sans mesure ni explication ne compte
-  pas. Mesurez un temps avant, appliquez, mesurez après, ou lisez le plan avec `explain()`.
-- **Gardez du temps pour la restitution.** Arrêtez le code à 16h30 au plus tard. Une démo qui tourne
-  et une explication claire valent mieux qu'un code ambitieux qui plante devant le groupe.
+  condition.
+- **Mesurez avant d'écrire.** Une optimisation ou une exploration sans chiffre ne compte pas.
+  Relevez les temps et les captures pendant que le job tourne, pas après.
+- **Cadrez l'exploration.** Une piste, une question, une mesure. Mieux vaut une exploration nette
+  qu'un chantier inachevé.
+- **Gardez l'heure de rédaction.** Arrêtez le code vers 16h30. Un rapport clair sur un pipeline
+  simple vaut mieux qu'un code ambitieux non documenté.

@@ -100,11 +100,6 @@ starter-code/spark_session.py
 projects/rapport_spark_onisr_Linda_Makamta.docx
 data/output/gold/onisr
 ```
-
-## Auteure
-
-Linda Makamta
-
 ---
 
 

@@ -1,0 +1,33 @@
+type_route,gravite,nombre_usagers
+Autoroute,Indemne,6578
+Autoroute,Blessé léger,5991
+Autoroute,Blessé hospitalisé,1213
+Autoroute,Tué,275
+Autre / non renseigné,Indemne,183
+Autre / non renseigné,Blessé léger,167
+Autre / non renseigné,Blessé hospitalisé,90
+Autre / non renseigné,Tué,25
+Hors réseau public,Indemne,45
+Hors réseau public,Blessé léger,45
+Hors réseau public,Blessé hospitalisé,25
+Hors réseau public,Tué,8
+Parc de stationnement,Indemne,416
+Parc de stationnement,Blessé léger,297
+Parc de stationnement,Blessé hospitalisé,143
+Parc de stationnement,Tué,21
+Route de métropole urbaine,Indemne,1483
+Route de métropole urbaine,Blessé léger,1366
+Route de métropole urbaine,Blessé hospitalisé,470
+Route de métropole urbaine,Tué,79
+Route départementale,Indemne,18400
+Route départementale,Blessé léger,16484
+Route départementale,Blessé hospitalisé,10398
+Route départementale,Tué,1979
+Route nationale,Indemne,3854
+Route nationale,Blessé léger,3578
+Route nationale,Blessé hospitalisé,1437
+Route nationale,Tué,312
+Voie communale,Indemne,22440
+Voie communale,Blessé léger,21675
+Voie communale,Blessé hospitalisé,5495
+Voie communale,Tué,699

@@ -1,3 +1,114 @@
+# Projet Spark Jour 4 — Pipeline ONISR 2023
+
+## Présentation du projet
+
+Ce dépôt contient mon projet Spark du jour 4 réalisé avec PySpark.
+
+J’ai choisi le jeu de données ONISR 2023 sur les accidents corporels de la circulation routière. L’objectif du projet est de construire un pipeline complet suivant une architecture :
+
+```text
+bronze → silver → gold
+```
+
+Le pipeline permet de lire les fichiers CSV bruts ONISR, de nettoyer les données, d’écrire une couche silver au format Parquet, puis de produire plusieurs analyses métier dans une couche gold.
+
+## Jeu de données utilisé
+
+Le jeu de données utilisé est composé de quatre fichiers ONISR 2023 :
+
+```text
+data/raw/onisr/2023/caracteristiques-2023.csv
+data/raw/onisr/2023/lieux-2023.csv
+data/raw/onisr/2023/usagers-2023.csv
+data/raw/onisr/2023/vehicules-2023.csv
+```
+
+Ces fichiers sont reliés par la clé commune :
+
+```text
+Num_Acc
+```
+
+## Analyses produites
+
+Les analyses réalisées sont :
+
+1. Nombre d’accidents par département.
+2. Gravité des usagers selon les conditions météorologiques.
+3. Top 5 des départements les plus accidentogènes par mois avec une window function.
+4. Analyse bonus : gravité des usagers selon le type de route.
+
+Les résultats sont disponibles dans :
+
+```text
+data/output/gold/onisr
+```
+
+## Résultats principaux
+
+### Volumétrie
+
+```text
+Lignes brutes :
+caracteristiques_brut : 54822
+lieux_brut : 70860
+usagers_brut : 125789
+vehicules_brut : 93585
+
+Lignes après nettoyage :
+caracteristiques_clean : 54822
+lieux_clean : 54822
+usagers_clean : 125671
+vehicules_clean : 93585
+```
+
+### Optimisation cache
+
+```text
+Sans cache : 2.392 secondes
+Avec cache : 1.092 secondes
+```
+
+### Adaptive Query Execution
+
+```text
+AQE OFF : 1.908 secondes
+AQE ON : 1.047 secondes
+```
+
+## Lancer le pipeline
+
+Depuis la racine du projet :
+
+```bash
+python starter-code/pipeline.py
+```
+
+Pendant l’exécution, la Spark UI est disponible ici :
+
+```text
+http://localhost:4040
+```
+
+## Livrables
+
+Les livrables principaux sont :
+
+```text
+starter-code/pipeline.py
+starter-code/spark_session.py
+projects/rapport_spark_onisr_Linda_Makamta.docx
+data/output/gold/onisr
+```
+
+## Auteure
+
+Linda Makamta
+
+---
+
+
+
 # Apache Spark - Ingestion & Calcul distribué
 
 Cours d'introduction à Apache Spark avec PySpark, sur 3 jours de cours et 1 jour de projet. Vous
